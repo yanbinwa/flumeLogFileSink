@@ -169,6 +169,11 @@ public class FlumeLogFileWriter implements Comparable<FlumeLogFileWriter>
         return this.changeTimeStamp;
     }
     
+    public void setChangeTimeStamp(long changeTimeStamp)
+    {
+        this.changeTimeStamp = changeTimeStamp;
+    }
+    
     /**
      * 这里只要比较expiryTimeout,expiryTimeout越小
      */
@@ -179,17 +184,21 @@ public class FlumeLogFileWriter implements Comparable<FlumeLogFileWriter>
         {
             return 1;
         }
+        if (this.equals(obj))
+        {
+            return 0;
+        }
         if (changeTimeStamp > obj.changeTimeStamp)
         {
             return 1;
         }
-        else if (changeTimeStamp == obj.changeTimeStamp)
+        else if (changeTimeStamp < obj.changeTimeStamp)
         {
-            return 0;
+            return -1;
         }
         else
         {
-            return -1;
+            return this.toString().compareTo(obj.toString());
         }
     }
     
@@ -199,6 +208,10 @@ public class FlumeLogFileWriter implements Comparable<FlumeLogFileWriter>
         if (obj == null)
         {
             return false;
+        }
+        if (this == obj)
+        {
+            return true;
         }
         if (!(obj instanceof FlumeLogFileWriter))
         {

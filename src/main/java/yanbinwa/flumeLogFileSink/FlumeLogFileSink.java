@@ -56,17 +56,17 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
     public static final int ROLL_FILE_SIZE_DEFAULT = 10;
     public static final int ROLL_FILE_INTERVAL_DEFAULT = 60 * 3600;
     public static final int ROLL_FILE_MAX_OPEN_FILE = 20;
-    public static final int ROLL_FILE_EXPIRY_TIMEOUT = 60 * 1000;
+    public static final long ROLL_FILE_EXPIRY_TIMEOUT = 60 * 1000;
     public static final int ROLL_FILE_EXPIRY_CHECK_INTERVAL = 10 * 1000;
     
-    public static final int MESSAGE_QUEUE_SIZE = 1000;
+    public static final int MESSAGE_QUEUE_SIZE = 2000;
     
     private String rollFileRootPath;
     private FlumeLogFileRollType logFileRollType = FlumeLogFileRollType.Size;
     private int rollFileSize = ROLL_FILE_SIZE_DEFAULT;
     private int rollFileInterval = ROLL_FILE_INTERVAL_DEFAULT;
     private int rollFileMaxOpenFile = ROLL_FILE_MAX_OPEN_FILE;
-    private int rollFileExpiryTimeout = ROLL_FILE_EXPIRY_TIMEOUT;
+    private long rollFileExpiryTimeout = ROLL_FILE_EXPIRY_TIMEOUT;
     
     /* serviceGroupName, serviceName, logFileName */
     Map<String, Map<String, Map<String, FlumeLogFileWriter>>> logFileWriterMap = new HashMap<String, Map<String, Map<String, FlumeLogFileWriter>>>();
@@ -111,7 +111,7 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
         rollFileSize = context.getInteger(ROLL_FILE_SIZE_KEY, ROLL_FILE_SIZE_DEFAULT);
         rollFileInterval = context.getInteger(ROLL_FILE_INTERVAL_KEY, ROLL_FILE_INTERVAL_DEFAULT);
         rollFileMaxOpenFile = context.getInteger(ROLL_FILE_MAX_OPEN_FILE_KEY, ROLL_FILE_MAX_OPEN_FILE);
-        rollFileExpiryTimeout = context.getInteger(ROLL_FILE_EXPIRY_TIMEOUT_KEY, ROLL_FILE_EXPIRY_TIMEOUT);
+        rollFileExpiryTimeout = context.getLong(ROLL_FILE_EXPIRY_TIMEOUT_KEY, ROLL_FILE_EXPIRY_TIMEOUT);
         logger.info("rollFileRootPath is: " + rollFileRootPath + "; "
                   + "logFileRollType is: " + logFileRollType + "; "
                   + "rollFileSize is: " + rollFileSize + "; "
@@ -248,6 +248,7 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
             if (writer == null)
             {
                 writer = new FlumeLogFileWriter(rollFileRootPath, serviceGroupName, serviceName, logFileName, rollFileSize);
+                logger.info("creat a writer " + writer);
                 writer.start();
                 addFlumeLogFileWriter(writer);
                 fileNameToWriterMap.put(logFileName, writer);
@@ -267,8 +268,10 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
         {
             FlumeLogFileWriter discardWriter = logFileWriterSet.pollFirst();
             discardWriter.stop();
-            System.out.println("Discard writer: " + discardWriter);
+            removeWriterFromlogFileWriterMap(discardWriter);
+            logger.info("Discard writer: " + discardWriter);
         }
+        logger.info("Add writer to logFileWriterSet " + writer);
         logFileWriterSet.add(writer);
     }
     
@@ -286,7 +289,7 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
         }
         if (!logFileWriterSet.contains(writer))
         {
-            logger.error("logFileWriterSet does not contain the writer: " + writer);
+            logger.error("logFileWriterSet does not contain the writer: " + writer + "; logFileWriterSet is: " + logFileWriterSet + "; logFileWriterMap is: " + logFileWriterMap);
             return false;
         }
 
@@ -310,41 +313,10 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
                     long changeTimestamp = writer.getChangeTimeStamp();
                     if (System.currentTimeMillis() - changeTimestamp > rollFileExpiryTimeout)
                     {
-                        logFileWriterSet.pollFirst();
+                        logFileWriterSet.remove(writer);
                         writer.stop();
+                        removeWriterFromlogFileWriterMap(writer);
                         logger.info("remove the expiry writer: " + writer);
-                        
-                        String serviceGroupName = writer.getServiceGroupName();
-                        Map<String, Map<String, FlumeLogFileWriter>> serviceNameToFileNameMap = logFileWriterMap.get(serviceGroupName);
-                        if (serviceNameToFileNameMap == null)
-                        {
-                            logger.error("Can not find serviceGroup in logFileWriterMap " + serviceGroupName);
-                            continue;
-                        }
-                        String serviceName = writer.getServiceName();
-                        Map<String, FlumeLogFileWriter> fileNameToWriterMap = serviceNameToFileNameMap.get(serviceName);
-                        if (fileNameToWriterMap == null)
-                        {
-                            logger.error("Can not find service in serviceNameToFileNameMap " + serviceName);
-                            continue;
-                        }
-                        String logFileName = writer.getLogFileName();
-                        if (!fileNameToWriterMap.containsKey(logFileName))
-                        {
-                            logger.error("Can not find log file in fileNameToWriterMap " + logFileName);
-                            continue;
-                        }
-                        
-                        fileNameToWriterMap.remove(logFileName);
-                        logger.info("remove the writer from logFileWriterMap " + writer);
-                        if (fileNameToWriterMap.size() == 0)
-                        {
-                            serviceNameToFileNameMap.remove(serviceName);
-                        }
-                        if (serviceNameToFileNameMap.size() == 0)
-                        {
-                            logFileWriterMap.remove(serviceGroupName);
-                        }
                     }
                     else
                     {
@@ -402,8 +374,49 @@ public class FlumeLogFileSink extends AbstractSink implements Configurable
         }
         byte[] logMsg = event.getBody();
         FlumeLogFileMsg flumeLogFileMsg = new FlumeLogFileMsg(serviceGroupName, serviceName, logFileName, logMsg);
-        msgQueue.offer(flumeLogFileMsg);
+        boolean ret = msgQueue.offer(flumeLogFileMsg);
+        if (ret)
+        {
+            logger.debug("Add the msg to msgQueue: " + flumeLogFileMsg);
+        }
+        else
+        {
+            logger.error("Fail to add msg to msgQueue: " + flumeLogFileMsg);
+        }
+    }
+    
+    private void removeWriterFromlogFileWriterMap(FlumeLogFileWriter writer)
+    {
+        String serviceGroupName = writer.getServiceGroupName();
+        Map<String, Map<String, FlumeLogFileWriter>> serviceNameToFileNameMap = logFileWriterMap.get(serviceGroupName);
+        if (serviceNameToFileNameMap == null)
+        {
+            logger.error("Can not find serviceGroup in logFileWriterMap " + serviceGroupName);
+            return;
+        }
+        String serviceName = writer.getServiceName();
+        Map<String, FlumeLogFileWriter> fileNameToWriterMap = serviceNameToFileNameMap.get(serviceName);
+        if (fileNameToWriterMap == null)
+        {
+            logger.error("Can not find service in serviceNameToFileNameMap " + serviceName);
+            return;
+        }
+        String logFileName = writer.getLogFileName();
+        if (!fileNameToWriterMap.containsKey(logFileName))
+        {
+            logger.error("Can not find log file in fileNameToWriterMap " + logFileName);
+            return;
+        }
         
-        logger.debug("Add the msg to msgQueue: " + flumeLogFileMsg);
+        fileNameToWriterMap.remove(logFileName);
+        logger.info("remove the writer from logFileWriterMap " + writer);
+        if (fileNameToWriterMap.size() == 0)
+        {
+            serviceNameToFileNameMap.remove(serviceName);
+        }
+        if (serviceNameToFileNameMap.size() == 0)
+        {
+            logFileWriterMap.remove(serviceGroupName);
+        }
     }
 }

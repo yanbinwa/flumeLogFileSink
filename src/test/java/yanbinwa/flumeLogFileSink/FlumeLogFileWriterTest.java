@@ -84,5 +84,45 @@ public class FlumeLogFileWriterTest
         System.out.println(logFileWriterSet.first());
         
     }
+    
+    @Test
+    public void testTreeSetContain()
+    {
+        TreeSet<FlumeLogFileWriter> logFileWriterSet = new TreeSet<FlumeLogFileWriter>();
+        String rootPath = "/Users/yanbinwa/Documents/workspace/springboot/serviceManager/flumeLogFileSink/test";
+        String serviceGroupName = "collection";
+        String serviceName = "collection_active";
+        String logFileName = "message";
+        int rollFileSize = 1000;
+        FlumeLogFileWriter writer1 = new FlumeLogFileWriter(rootPath, serviceGroupName, serviceName, logFileName, rollFileSize);
+        
+        logFileWriterSet.add(writer1);
+        
+        //serviceGroupName = "cache";
+        FlumeLogFileWriter writer2 = new FlumeLogFileWriter(rootPath, serviceGroupName, serviceName, logFileName, rollFileSize);
+        writer2.setChangeTimeStamp(1000L);
+        
+        System.out.println("--------------------------");
+        System.out.println(logFileWriterSet.size());
+        
+        if (logFileWriterSet.contains(writer1))
+        {
+            System.out.println("Contained writer1");
+        }
+        
+        if (logFileWriterSet.contains(writer2))
+        {
+            System.out.println("Contained writer2");
+        }
+        
+        FlumeLogFileWriter writer = logFileWriterSet.first();
+        System.out.println(writer.getChangeTimeStamp());
+        
+        TreeSet<String> stringSet = new TreeSet<String>();
+        stringSet.add("wyb");
+        stringSet.add("123");
+        System.out.println("--------------------------");
+        System.out.println(stringSet.size());
+    }
 
 }

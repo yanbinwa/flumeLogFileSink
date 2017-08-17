@@ -21,6 +21,19 @@
 	    <artifactId>flume-ng-core</artifactId>
 	    <version>1.7.0</version>
 	</dependency>
+	<!-- https://mvnrepository.com/artifact/org.apache.flume/flume-ng-configuration -->
+	<dependency>
+	    <groupId>org.apache.flume</groupId>
+	    <artifactId>flume-ng-configuration</artifactId>
+	    <version>1.7.0</version>
+	</dependency>
+	<!-- https://mvnrepository.com/artifact/org.apache.flume/flume-ng-sinks -->
+	<dependency>
+	    <groupId>org.apache.flume</groupId>
+	    <artifactId>flume-ng-sinks</artifactId>
+	    <version>1.7.0</version>
+	    <type>pom</type>
+	</dependency>
   </dependencies>
   <build>
         <plugins>
